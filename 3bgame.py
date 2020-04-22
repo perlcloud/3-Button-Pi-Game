@@ -1,7 +1,8 @@
 import RPi.GPIO as GPIO
 import time
 from datetime import datetime
-from random import randint
+import random
+from collections import Counter
 
 
 class LED:
@@ -53,8 +54,10 @@ class CountClicks:
         if self.pressed == True:
             self.led.on()
             time.sleep(0.2)
+            return True
         else:
             self.led.off()
+            return False
 
 
 class Timer:
@@ -70,6 +73,28 @@ class Timer:
             return True
         else: 
             return False
+
+
+def create_flash_pattern(total_flash_count, buttons_count):
+    flashes = []
+
+    last_random_button = random.randint(0, buttons_count)
+    for _ in range(total_flash_count):
+        if total_flash_count > 0:
+            possible_random_button = [n for n in range(buttons_count) if n != last_random_button]
+            random_button = random.choice(possible_random_button)
+            random_flash_count = random.randint(1, total_flash_count)
+            for _ in range (random_flash_count):
+                flashes.append(random_button)
+            # flashes.append(
+            #     (random_button, random_flash_count)
+            # )
+            total_flash_count -= random_flash_count
+            last_random_button = random_button
+
+    print('Flashes:', flashes)
+    return flashes
+
 
 
 if __name__ == "__main__":
@@ -94,32 +119,43 @@ if __name__ == "__main__":
         GPIO.setup(value["led"], GPIO.OUT)
 
     try:
-        button_a = CountClicks(settings["a"]["button"], led=settings["a"]["led"])
-        button_a = CountClicks(settings["b"]["button"], led=settings["b"]["led"])
-        timer = Timer(5)
+        # Create button objects
+        buttons = [
+            CountClicks(settings["a"]["button"], led=settings["a"]["led"]),
+            CountClicks(settings["b"]["button"], led=settings["b"]["led"]),
+        ]
+        buttons_count = len(buttons)
+    
+        # Get game details
+        count = 8
+        flashes = create_flash_pattern(count, buttons_count)
 
-        flash_count = randint(1, 10)
-        button_a.led.flash(flash_count, sleep_time=0.2)
-        time.sleep(1)
-        button_a.led.flash(3, sleep_time=0.05)
+        # Lets play!
+        for button in flashes:
+            buttons[button].led.flash(1, sleep_time=0.2)
 
+        time.sleep(0.5)
+        buttons[1].led.flash(3, sleep_time=0.05)  # TODO replace with seperate LED
 
+        # Accept input
+        timer = Timer(10)
         timer.start()
+
+        input_history = []
         while True:
-            button_a.monitor()
+            for button_number, button in enumerate(buttons):
+                if button.monitor():
+                    input_history.append(button_number)
             
             if timer.expired:
                 print("Times up!")
                 break
-        
-        print(f"You pressed the button {button_a.count} out of {flash_count} times.")
 
-        if button_a.count == flash_count:
-            print("You win!")
-        else:
-            print("You loose, sucker.")
-        
+        print('\nYou win:', input_history == flashes)
+            
+        print('Expected input:', input_history)    
+        print('Your input:    ', flashes)
 
     except Exception as e:
         GPIO.cleanup()
-        raise
+        raise 
